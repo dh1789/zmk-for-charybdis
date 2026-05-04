@@ -1,16 +1,33 @@
+/*
+ * Charybdis ZMK Keymap - Converted from VIA layout
+ *
+ * VIA layout 가정: 4x6 + 5+3 thumb (active keys)
+ * Right side는 VIA에서 outer→inner 순서로 저장되어 있어 ZMK용으로 reverse 적용
+ *
+ * 호환 안 되는 키들 (모두 &none 처리됨):
+ *   - CUSTOM(0~3): 트랙볼 DPI 조절 (Layer 3) — ZMK는 zip_xy_scaler 정적 설정
+ *   - CUSTOM(6): Sniping 토글 (Layer 3) — ZMK는 별도 레이어로 처리
+ *   - KC_MS_ACCEL0/1/2: 마우스 가속 단계 (Layer 3) — ZMK는 mmv 설정 사용
+ *
+ * 부분 호환:
+ *   - KC_HAEN: 한영키 → &kp LANG1 (작동 안 하면 INT5 등 시도 필요)
+ *
+ * Hold-tap 파라미터: macOS 친화적으로 설정 (tap-preferred + require-prior-idle-ms)
+ */
+
 #include <dt-bindings/zmk/mouse.h>
-#include <input/processors.dtsi>
-#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <behaviors/mouse_keys.dtsi>
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/keys.h>
+#include <dt-bindings/zmk/outputs.h>
 #include <dt-bindings/zmk/pointing.h>
-#include <dt-bindings/zmk/rgb.h>
 
-#define ZMK_POINTING_DEFAULT_MOVE_VAL 1000 // 600
-#define ZMK_POINTING_DEFAULT_SCRL_VAL 12   // 10
+/ {
+    chosen { zmk,physical-layout = &charybdis_6col_layout; };
+};
 
-
+// macOS 친화적 hold-tap 설정 (stuck 방지)
 &mt {
     flavor = "tap-preferred";
     tapping-term-ms = <200>;
@@ -19,271 +36,135 @@
 };
 
 &lt {
-    tapping-term-ms = <200>;
     flavor = "tap-preferred";
+    tapping-term-ms = <200>;
     quick-tap-ms = <175>;
     require-prior-idle-ms = <150>;
 };
 
-
-&mmv_input_listener { input-processors = <&zip_xy_scaler 4 1>; };
-
-&msc_input_listener { input-processors = <&zip_scroll_scaler 4 1>; };
-
-&msc {
-    acceleration-exponent = <0>;      // 0
-    time-to-max-speed-ms = <100>;       // 300
-    delay-ms = <0>;                   // 0
-};
-
-&mmv {
-    time-to-max-speed-ms = <500>;
-    acceleration-exponent = <1>;
-    trigger-period-ms = <16>;
-};
-
 / {
-    // 上下滚动编码器行为
-
-    scroll_vertical_encoder: scroll_vertical_encoder {
-        compatible = "zmk,behavior-sensor-rotate";
-        #sensor-binding-cells = <0>;
-        bindings = <&msc SCRL_DOWN>, <&msc SCRL_UP>;
-
-        tap-ms = <100>;
-    };
-
-    // 左右滚动编码器行为
-
-    scroll_horizontal_encoder: scroll_horizontal_encoder {
-        compatible = "zmk,behavior-sensor-rotate";
-        #sensor-binding-cells = <0>;
-        bindings = <&msc SCRL_LEFT>, <&msc SCRL_RIGHT>;
-
-        tap-ms = <100>;
-    };
-
     behaviors {
+        // VIA의 multi-modifier MT() 변환용 custom hold-tap
+        // 예: MT(MOD_LSFT|MOD_LALT|MOD_LGUI, KC_W) → &mtm LS(LA(LGUI)) W
+        mtm: mod_tap_multi {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            bindings = <&kp>, <&kp>;
+            flavor = "tap-preferred";
+            tapping-term-ms = <200>;
+            quick-tap-ms = <175>;
+            require-prior-idle-ms = <150>;
+        };
     };
 
     macros {
-        To1_macro: To1_macro {
+        // VIA MACRO(0): U → 200ms → O → 100ms → I
+        macro_uoi: macro_uoi {
             compatible = "zmk,behavior-macro";
-            label = "To1_macro";
             #binding-cells = <0>;
-            bindings = <&rgb_ug RGB_EFF &rgb_ug RGB_COLOR_HSB(128,100,50) &to 1>;
+            bindings
+                = <&macro_tap &kp U>
+                , <&macro_wait_time 200>
+                , <&macro_tap &kp O>
+                , <&macro_wait_time 100>
+                , <&macro_tap &kp I>
+                ;
         };
 
-        To1_macro_A: To1_macro_A {
+        // VIA MACRO(1): 2 → 200ms → SPACE  (현재 keymap에서 사용 안 됨)
+        macro_2sp: macro_2sp {
             compatible = "zmk,behavior-macro";
-            label = "To1_macro_A";
             #binding-cells = <0>;
-            bindings = <&rgb_ug RGB_COLOR_HSB(128,100,50) &to 1>;
-        };
-
-        To0_macro: To0_macro {
-            compatible = "zmk,behavior-macro";
-            label = "To0_macro";
-            #binding-cells = <0>;
-            bindings = <&rgb_ug RGB_EFR &to 0>;
-        };
-
-        To2_macro_A: To2_macro_A {
-            compatible = "zmk,behavior-macro";
-            label = "To2_macro_A";
-            #binding-cells = <0>;
-            bindings = <&rgb_ug RGB_COLOR_HSB(250,100,50) &to 2>;
-        };
-
-        To2_macro: To2_macro {
-            compatible = "zmk,behavior-macro";
-            label = "To2_macro";
-            #binding-cells = <0>;
-            bindings = <&rgb_ug RGB_EFF &rgb_ug RGB_COLOR_HSB(250,100,50) &to 2>;
+            bindings
+                = <&macro_tap &kp N2>
+                , <&macro_wait_time 200>
+                , <&macro_tap &kp SPACE>
+                ;
         };
     };
 
     keymap {
         compatible = "zmk,keymap";
 
+        // ===========================================================================
+        // Layer 0 (BASE) - 홈로우 모드 + Hyper 키 매핑
+        // ===========================================================================
         layer_0 {
+            label = "BASE";
             bindings = <
-&kp ESC         &kp N1  &kp N2  &kp N3        &kp N4     &kp N5        &kp N6     &kp N7     &kp N8     &kp N9            &kp N0    &kp BACKSPACE
-&kp TAB         &kp Q   &kp W   &kp E         &kp R      &kp T         &kp Y      &kp U      &kp I      &kp O             &kp P     &kp BSLH
-&kp LEFT_SHIFT  &kp A   &kp S   &kp D         &kp F      &kp G         &kp H      &kp J      &kp K      &kp L             &kp SEMI  &kp SQT
-&kp LCTRL       &kp Z   &kp X   &kp C         &kp V      &kp B         &kp N      &kp M      &kp COMMA  &kp LEFT_BRACKET  &kp FSLH  &kp MINUS
-                                &kp LEFT_ALT  &kp SPACE  &to 1    &kp LWIN   &kp SPACE
-                                              &mkp MB1   &mkp MB2      &kp ENTER
+// ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮   ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮
+&kp N1              &kp N2          &kp N3          &kp N4          &kp N5          &kp N6                                                                  &kp N7          &kp N8          &kp N9          &kp N0          &kp MINUS       &kp EQUAL
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp ESC             &kp Q           &mtm LS(LA(LGUI)) W  &mtm LC(LA(LGUI)) E  &kp R           &kp T                                                          &kp Y           &kp U           &kp I           &kp O           &kp P           &kp BSLH
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&mt LCTRL TAB       &mt LSHIFT A    &lt 2 S         &lt 1 D         &lt 2 F         &lt 3 G                                                                  &kp H           &kp J           &kp K           &kp L           &mt LSHIFT SEMI &mt LCTRL SQT
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&mt LALT GRAVE      &mtm LS(LALT) Z &mt LALT X      &lt 3 C         &mtm LC(LS(LGUI)) V  &mtm LC(LS(LGUI)) B                                                  &mtm LC(LS(LGUI)) N  &mtm LC(LS(LGUI)) M  &mt LGUI COMMA  &mt LALT DOT    &mtm LS(LALT) FSLH  &mt LALT RET
+// ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯   ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯
+                                    &mkp LCLK       &kp RBKT        &kp F19         &mt LGUI BSPC   &kp LBKT                                                   &kp PG_UP       &lt 1 SPACE     &kp PG_DN
             >;
-
-            sensor-bindings =
-                <&scroll_vertical_encoder>,
-                // 编码器1：上下滚动,
-                <&scroll_horizontal_encoder>;
-  // 编码器2：左右滚动
         };
 
+        // ===========================================================================
+        // Layer 1 - 미디어/네비게이션/숫자 패드
+        // ===========================================================================
         layer_1 {
+            label = "L1";
             bindings = <
-&kp F1          &kp F2  &kp F3  &kp F4        &kp F5      &kp F6             &kp F7     &kp F8    &kp F9      &kp F10            &kp F11  &kp F12
-&kp CAPS        &none   &none   &none         &none       &none              &none      &none     &kp UP      &none              &none    &none
-&kp LEFT_SHIFT  &none   &none   &none         &bt BT_NXT  &bt BT_CLR         &none      &kp LEFT  &kp DOWN    &kp RIGHT          &none    &none
-&kp LCTRL       &none   &none   &none         &none       &none    &none      &none     &kp PERIOD  &kp RIGHT_BRACKET  &none    &kp EQUAL
-                                &kp LEFT_ALT  &kp SPACE   &to 0         &none      &none
-                                              &mkp MB1    &mkp MB2           &kp ENTER
+// ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮   ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮
+&kp C_VOL_DN        &kp C_MUTE      &kp C_VOL_UP    &kp C_PREV      &kp C_PP        &kp C_NEXT                                                              &none           &none           &none           &none           &none           &none
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LS(TAB)         &none           &kp LG(LBKT)    &kp LC(LA(LG(RBKT)))  &kp LG(RBKT)    &kp LC(LG(RBKT))                                                   &kp LANG1       &kp N7          &kp N8          &kp N9          &kp KP_DIVIDE   &kp KP_MULTIPLY
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LS(TAB)         &kp LSHIFT      &kp LS(LG(LBKT))  &kp LS(LG(LBKT))  &kp LS(LG(RBKT))  &kp LC(RBKT)                                                       &kp RET         &kp LS(MINUS)   &kp N4          &kp N5          &kp N6          &kp KP_MINUS
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LCTRL           &none           &kp LC(LEFT)    &kp LC(C)       &kp LC(RIGHT)   &kp F19                                                                  &kp LS(GRAVE)   &kp N1          &kp N2          &kp N3          &kp DOT         &kp KP_PLUS
+// ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯   ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯
+                                    &mkp RCLK       &none           &kp RET         &mt LGUI BSPC   &none                                                     &kp COMMA       &kp N0          &kp LS(N1)
             >;
         };
 
+        // ===========================================================================
+        // Layer 2 - 심볼/네비게이션/매크로
+        // ===========================================================================
         layer_2 {
+            label = "L2";
             bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
+// ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮   ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮
+&kp LS(N1)          &kp LS(N2)      &kp LS(N3)      &kp LS(N4)      &kp LS(N5)      &kp LS(N6)                                                              &kp LS(N7)      &kp LS(N8)      &kp LS(N9)      &kp LS(N0)      &kp LS(MINUS)   &kp LS(EQUAL)
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LG(TAB)         &none           &none           &none           &none           &kp LS(LG(N4))                                                          &kp LANG1       &macro_uoi      &none           &none           &none           &kp LC(LS(LG(PG_DN)))
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LCTRL           &kp LSHIFT      &kp LC(LS(LG(N4)))  &kp LS(LG(N4))  &kp LSHIFT      &kp LC(LG(RBKT))                                                    &kp LEFT        &kp DOWN        &kp UP          &kp RIGHT       &kp LS(SEMI)    &kp LC(LS(LG(RET)))
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&none               &none           &none           &none           &none           &none                                                                    &kp F19         &kp F18         &kp F20         &kp LC(LS(LG(LEFT)))  &kp LC(LS(LG(RIGHT)))  &kp RET
+// ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯   ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯
+                                    &none           &none           &kp RET         &mt LGUI BSPC   &none                                                     &kp F18         &lt 1 SPACE     &kp F20
             >;
         };
 
+        // ===========================================================================
+        // Layer 3 - 트랙볼 컨트롤 / 시스템 (CUSTOM 키들은 ZMK 미지원)
+        // ===========================================================================
+        // 호환 안 되는 키들이 모두 이 레이어에 있음:
+        //   CUSTOM(0~3): DPI 조절 → ZMK는 zip_xy_scaler 정적 설정으로 대체 (변경 불가)
+        //   CUSTOM(6): Sniping toggle → ZMK는 별도 레이어로 처리
+        //   KC_MS_ACCEL0/1/2: 마우스 가속 단계 → ZMK는 mmv 설정으로 처리
+        // 모두 &none 처리.
         layer_3 {
+            label = "L3";
             bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
+// ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮   ╭───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────╮
+&none               &none           &none           &none           &none           &none                                                                    &kp LA(LC(LEFT))  &kp LA(LC(DOWN))  &kp LA(LC(UP))  &kp LA(LC(RIGHT))  &none           &none
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&none               &none           &none           &none           &none           &none                                                                    &none           &kp LG(N2)      &kp LS(LG(R))   &kp LG(N4)      &none           &kp C_SLEEP
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&kp LCTRL           &kp LSHIFT      &none           &none           &none           &none                                                                    &none           &none           &none           &none           &none           &none
+// ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤   ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+&none               &none           &none           &none           &none           &none                                                                    &kp LG(N1)      &kp LS(LG(A))   &kp LG(N3)      &kp LS(LG(S))   &kp LS(LG(R))   &none
+// ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯   ╰───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────╯
+                                    &none           &none           &kp LSHIFT      &mt LGUI BSPC   &none                                                     &none           &none           &none
             >;
         };
-
-        layer_4 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_5 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_6 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_7 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_8 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_9 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        layer_10 {
-            bindings = <
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
-                        &trans  &trans  &trans    &trans  &trans
-                                &trans  &trans    &trans
-            >;
-        };
-
-        /* layer_2 {
-            bindings = <
-&none  &none   &none    &none   &none         &none         &kp N1         &none         &none     &none  &none   &to 0
-&none  &none   &none    &none   &none         &none         &none         &none          &rgb_ug RGB_BRD &rgb_ug RGB_BRI  &rgb_ug RGB_EFF   &rgb_ug RGB_TOG
-&none  &none   &none    &none   &none         &none         &none         &mkp LCLK     &mkp RCLK  &none  &none   &none
-&none  &none   &none    &none   &bt BT_NXT  &bt BT_CLR    &none         &none         &none     &none  &none   &none
-                                   &none         &none         &none         &none         &none
-                                                 &none         &none         &none
-            >;
-       
-            
-        };
-
-       Mouse {
-            bindings = <
-&none        &none         &none         &none         &none      &none         &none       &none      &none         &none         &none         &none
-&none        &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 3  &none      &bt BT_CLR    &bt BT_CLR  &none      &bt BT_SEL 2  &bt BT_SEL 1  &bt BT_SEL 0  &none
-&none        &trans        &trans        &mkp MCLK     &trans     &none         &none       &trans     &mkp MCLK     &trans        &trans        &none
-&bootloader  &trans        &mkp RCLK     &mo 4         &mkp LCLK  &mo 5         &mo 5       &mkp LCLK  &mo 4         &mkp RCLK     &trans        &bootloader
-                                         &mo 5         &mkp LCLK  &mkp RCLK     &mkp RCLK   &mkp LCLK
-                                                       &none      &trans        &trans
-            >;
-
-            
-        };
-
-        layer_4 {
-            bindings = <
-&trans  &trans  &trans     &trans     &trans     &trans       &trans     &trans     &trans     &trans     &trans  &trans
-&trans  &trans  &trans     &trans     &trans     &trans       &trans     &trans     &trans     &trans     &trans  &trans
-&trans  &trans  &trans     &mkp MCLK  &trans     &trans       &trans     &trans     &mkp MCLK  &trans     &trans  &trans
-&trans  &trans  &mkp RCLK  &trans     &mkp LCLK  &trans       &trans     &mkp LCLK  &trans     &mkp RCLK  &trans  &trans
-                           &trans     &mkp LCLK  &mkp RCLK    &mkp RCLK  &mkp LCLK
-                                      &trans     &trans       &trans
-            >;
-                
-                
-               
-        };
-
-        layer_5 {
-            bindings = <
-&trans  &trans  &trans     &trans     &trans     &trans       &trans     &trans     &trans     &trans     &trans  &trans
-&trans  &trans  &trans     &trans     &trans     &trans       &trans     &trans     &trans     &trans     &trans  &trans
-&trans  &trans  &trans     &mkp MCLK  &trans     &trans       &trans     &trans     &mkp MCLK  &trans     &trans  &trans
-&trans  &trans  &mkp RCLK  &trans     &mkp LCLK  &trans       &trans     &mkp LCLK  &trans     &mkp RCLK  &trans  &trans
-                           &trans     &mkp LCLK  &mkp RCLK    &mkp RCLK  &mkp LCLK
-                                      &trans     &trans       &trans
-            >;
-                
-                
-        };*/
     };
 };
